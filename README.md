@@ -1,4 +1,4 @@
-# EquateFace
+## EquateFace
 
-# Comparison of faces to obtain their similarity
+Comparison of faces to obtain their similarity
 

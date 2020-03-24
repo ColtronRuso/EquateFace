@@ -51,6 +51,9 @@ parser.add_argument('-option', type=str, help="Opcio desitjada a realitzar",
 parser.add_argument('-image', type=str, help="directori i nom del fitxe a llegir", 
                     default="./images/main.jpg")
 
+parser.add_argument('-image2', type=str, help="directori i nom del fitxe a comparar", 
+                    default="./images/main2.jpg")
+
 parser.add_argument('-extensions', type=str, help="extensions que es volen comprovar",
                 default=['*.jpg','*.jpeg','*.png'])
 parser.add_argument('-type_vector', type=str, help="Tipus de vector que utilitzara per agrupar i classificar",
@@ -126,6 +129,9 @@ def getRep(imgPath):
     return rep
 
 
+# --------------- Obtencion de vectores con salida de error ------------------------
+# Error -> vector de 128 lleno de 0s
+
 def getRepImg(bgrImg):
     #if argos.verbose:
     #    print("Processing {}.".format(imgPath))
@@ -172,9 +178,71 @@ def draw_rects(img, rects, color):
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
         
         
+def visualizar(img, d_main):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.equalizeHist(gray)
+
+    
+    #Mesures de distorsio
+    w,h = gray.shape
+    if argos.max_size == -1:
+        size_max = int(max([w*0.35,h*0.35]))
+    else:
+        size_max = min([w,h])
+        
+    if argos.min_size == -1:
+        size_min = int(min([w*0.05,h*0.05]))
+    else:
+        size_min = argos.min_size
+    
+    t = lib.clock()
+    
+    # Localitzacio imatge
+    rects = lib.findFaces.detect(gray, cascade, argos, size_min, size_max)
+    vis = img.copy()
+    
+    #------------ comparativa de imagen ----------------------
+        
+    if argos.comparate:
+        d = getRepImg(img)
+        #print("Comparing {} with {}.".format(img1, img2))
+        pear = np.corrcoef(d_main, d)[0,1] # Obtencion del coeficiente de correlacion de Pearson
+    
+    
+    #cv2.putText(img,"Similitud del {:0.2f}%".format(pear*100), (0,0), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+    
+    #print("   + Coef. Pearson distance between images: {:0.3f}".format(pear))
+    #print("   + Similitud del {:0.2f}%".format(pear*100))
+    
+    
+    #--------------- Final comparativa --------------------------
+    
+    
+    if argos.aviso:
+        lib.findFaces.draw_rects(vis, rects, (0, 255, 0))
+    for x1, y1, x2, y2 in rects:
+        if argos.level_blur > 0.01:
+            roi = vis[y1:y2, x1:x2]
+            # Distorsionar cara se multiplica longuitud cuadrado cara por nivel
+            img_blur = cv2.blur(roi,(int(y2*argos.level_blur),int(y2*argos.level_blur)))
+            vis[y1:y2, x1:x2] = img_blur
+        
+    dt = lib.clock() - t
+
+    lib.draw_str(vis, (20, 20), 'time: %.1f ms' % (dt*1000))
+    # --------------------- Para Similitud -----------------------
+    if argos.comparate:
+        lib.draw_str(vis, (20, 40), 'Similitud: {:0.2f} %'.format(pear*100))
+    # --------------------- Final Similitud ---------------------------------------
+    
+    return vis
+        
+        
 
 if __name__ == '__main__':
     import sys, getopt
+    
+    print "Presione ESC para finalizar"
     
     #-------------------- Variables para Threads ---------------------------
     # objecte locker per controlar els threads
@@ -185,11 +253,35 @@ if __name__ == '__main__':
     
     # Iniciar variables
     threads, images, run_th = [], [], []
-    m, per = 0, -1
+    nThreads, per = 0, -1
     #-------------------- Final __________________
+    
+    
+    
 
     
-    if argos.option in ('video','blur_image','blur_dir'):
+    if argos.option in ('video','blur_image','blur_dir','compare_images'):
+        
+        if argos.option == 'compare_images':
+            if argos.image is not None and argos.image2 is not None:
+                
+                d_main = getRep(argos.image)
+                
+                d_main2 = getRep(argos.image2)
+                print("Comparing {} with {}.".format(argos.image, argos.image2))
+                pear = np.corrcoef(d_main, d_main2)[0,1] # Obtencion del coeficiente de correlacion de Pearson
+    
+    
+                #cv2.putText(img,"Similitud del {:0.2f}%".format(pear*100), (0,0), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+    
+                print("   + Coef. Pearson distance between images: {:0.3f}".format(pear))
+                print("   + Similitud del {:0.2f}%".format(pear*100))
+                
+                
+            else:
+                print "Falta argument -image << .../directori/imatge.jpg >> i/o -image2 << .../directori/imatge2.jpg >>"
+        
+        
         if argos.option == 'video':
 
             #args, video_src = getopt.getopt(sys.argv[1:], '', ['cascade=','level_blur='])
@@ -210,68 +302,31 @@ if __name__ == '__main__':
 
             cascade = cv2.CascadeClassifier(cascade_fn)
 
-            cam = lib.vd.create_capture(video_src, fallback='synth:bg=./images/lena.jpg:noise=0.05')
+            cam = lib.vd.create_capture(video_src, fallback='synth:bg=./images/main.jpg:noise=0.05')
 
             while True:
                 ret, img = cam.read()
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                gray = cv2.equalizeHist(gray)
-
                 
-                #Mesures de distorsio
-                w,h = gray.shape
-                if argos.max_size == -1:
-                    size_max = int(max([w*0.35,h*0.35]))
-                else:
-                    size_max = min([w,h])
-                    
-                if argos.min_size == -1:
-                    size_min = int(min([w*0.05,h*0.05]))
-                else:
-                    size_min = argos.min_size
+                #-------- Paralelizacion --------
                 
-                t = lib.clock()
-                
-                # Localitzacio imatge
-                rects = lib.findFaces.detect(gray, cascade, argos, size_min, size_max)
-                vis = img.copy()
-                
-                #------------ comparativa de imagen ----------------------
-                   
-                if argos.comparate:
-                    d = getRepImg(img)
-                    #print("Comparing {} with {}.".format(img1, img2))
-                    pear = np.corrcoef(d_main, d)[0,1] # Obtencion del coeficiente de correlacion de Pearson
+                #Implementacion multiples Threads
+                #try:
+                    # Es crea un hilo para que el Thread haga las operaciones con la imagen de la camara
+               #     threads.append(threading.Thread(target=imageFaces, 
+                #            args=(image, outputDir, mutex, face_cascade_paths, scale_factor, min_neighbors, exts, min_size, max_size, flags,)))
+                #except:
+                 #   print "Error desconocido del Thread"
                 
                 
-                #cv2.putText(img,"Similitud del {:0.2f}%".format(pear*100), (0,0), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+                # Implementacion basica funcional con un Thread
+                vis = visualizar(img,d_main) #funcion a paralelizar por secuencias FIFO
+                nThreats = nThreads + 1 # Comptador de threads
                 
-                #print("   + Coef. Pearson distance between images: {:0.3f}".format(pear))
-                #print("   + Similitud del {:0.2f}%".format(pear*100))
-                
-                
-                #--------------- Final comparativa --------------------------
-                
-                
-                if argos.aviso:
-                    lib.findFaces.draw_rects(vis, rects, (0, 255, 0))
-                for x1, y1, x2, y2 in rects:
-                    if argos.level_blur > 0.01:
-                        roi = vis[y1:y2, x1:x2]
-                        # Distorsionar cara se multiplica longuitud cuadrado cara por nivel
-                        img_blur = cv2.blur(roi,(int(y2*argos.level_blur),int(y2*argos.level_blur)))
-                        vis[y1:y2, x1:x2] = img_blur
-                    
-                dt = lib.clock() - t
-
-                lib.draw_str(vis, (20, 20), 'time: %.1f ms' % (dt*1000))
-                # --------------------- Para Similitud -----------------------
-                if argos.comparate:
-                    lib.draw_str(vis, (20, 40), 'Similitud: {:0.2f} %'.format(pear*100))
-                # --------------------- Final Similitud ---------------------------------------
+                #-------- Final ---------------
                 
                 cv2.imshow('facedetect', vis)
-
+                
+                #salida al presionar la tecla ESC
                 if 0xFF & cv2.waitKey(5) == 27:
                     break
             cv2.destroyAllWindows()

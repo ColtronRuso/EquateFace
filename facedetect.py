@@ -10,6 +10,13 @@ import glob
 import argparse
 import time
 
+# Paralelizacion
+import random
+import threading
+import thread
+import multiprocessing as mp
+
+
 import openface
 
 import llibreries as lib
@@ -163,9 +170,24 @@ def getRepImg(bgrImg):
 def draw_rects(img, rects, color):
     for x1, y1, x2, y2 in rects:
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+        
+        
 
 if __name__ == '__main__':
     import sys, getopt
+    
+    #-------------------- Variables para Threads ---------------------------
+    # objecte locker per controlar els threads
+    mutex = threading.Lock() #Per a threading
+    ncpu = mp.cpu_count() # Numero de cpus del ordinador
+    
+    #ncpu = 1 #Test per calcular temps amb un CPU
+    
+    # Iniciar variables
+    threads, images, run_th = [], [], []
+    m, per = 0, -1
+    #-------------------- Final __________________
+
     
     if argos.option in ('video','blur_image','blur_dir'):
         if argos.option == 'video':
